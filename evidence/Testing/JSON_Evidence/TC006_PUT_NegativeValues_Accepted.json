@@ -1,0 +1,40 @@
+{
+  "test_case": "TC-06",
+  "endpoint": "PUT /api/loan-rules/6",
+  "request": {
+    "method": "PUT",
+    "url": "https://localhost:8443/api/loan-rules/6",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    },
+    "body": {
+      "max_items_checked_out": -5,
+      "loan_period_days": -10,
+      "renewal_limit": -1
+    }
+  },
+  "response": {
+    "status": 200,
+    "statusText": "OK",
+    "body": {
+      "id": 6,
+      "name": "Test Update Rule",
+      "patron_type": "ADULT",
+      "item_type": "ANY",
+      "max_items_checked_out": -5,
+      "loan_period_days": -10,
+      "renewal_limit": -1,
+      "blocked_item_statuses": [],
+      "priority": 10,
+      "is_active": true,
+      "created_at": "2026-09-11T17:15:23.456Z",
+      "updated_at": "2026-09-11T17:20:45.789Z"
+    }
+  },
+  "defect": "BUG-001",
+  "issue": "PUT endpoint accepted negative values that POST would reject",
+  "expected_status": 400,
+  "actual_status": 200,
+  "timestamp": "2026-09-11T17:20:45.789Z"
+}

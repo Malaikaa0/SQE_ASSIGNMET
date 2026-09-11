@@ -1,0 +1,42 @@
+{
+  "test_case": "TC-10",
+  "endpoint": "GET /api/records/holds/8",
+  "request": {
+    "method": "GET",
+    "url": "https://localhost:8443/api/records/holds/8",
+    "headers": {
+      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+  },
+  "response": {
+    "status": 200,
+    "statusText": "OK",
+    "body": {
+      "id": 8,
+      "patron_id": 6,
+      "patron_name": "Gap Test Patron",
+      "bib_id": 10,
+      "bib_title": "Test Deletion Gap Book",
+      "item_id": null,
+      "item_barcode": null,
+      "status": "ACTIVE",
+      "placed_at": "2026-09-11T18:10:15.567Z",
+      "expires_at": "2026-09-18T18:10:15.567Z",
+      "pickup_location": "MAIN"
+    }
+  },
+  "defect": "BUG-002",
+  "issue": "Hold's item_id silently changed from 6 to null after item deletion",
+  "data_integrity_violation": "Patron has ACTIVE hold pointing at non-existent item",
+  "comparison": {
+    "before_deletion": {
+      "item_id": 6,
+      "item_barcode": "BC-TEST-GAP-1"
+    },
+    "after_deletion": {
+      "item_id": null,
+      "item_barcode": null
+    }
+  },
+  "timestamp": "2026-09-11T18:11:15.789Z"
+}

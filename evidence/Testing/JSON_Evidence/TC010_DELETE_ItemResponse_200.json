@@ -1,0 +1,25 @@
+{
+  "test_case": "TC-10",
+  "endpoint": "DELETE /api/records/items/6",
+  "request": {
+    "method": "DELETE",
+    "url": "https://localhost:8443/api/records/items/6",
+    "headers": {
+      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+  },
+  "response": {
+    "status": 200,
+    "statusText": "OK",
+    "body": {
+      "success": true,
+      "message": "Item deleted."
+    }
+  },
+  "defect": "BUG-002",
+  "issue": "Item with active hold was deleted successfully (200 OK) instead of being blocked (409 Conflict)",
+  "expected_status": 409,
+  "actual_status": 200,
+  "impact": "Hold's item_id will be silently nulled by FK constraint, leaving patron with orphaned ACTIVE hold",
+  "timestamp": "2026-09-11T18:11:02.456Z"
+}

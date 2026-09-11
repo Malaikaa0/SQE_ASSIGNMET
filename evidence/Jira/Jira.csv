@@ -1,0 +1,218 @@
+﻿Summary,Issue key,Issue id,Issue Type,Status,Project key,Project name,Project type,Project lead,Project lead id,Project description,Priority,Resolution,Assignee,Assignee Id,Reporter,Reporter Id,Creator,Creator Id,Created,Updated,Last Viewed,Resolved,Due date,Votes,Labels,Labels,Labels,Labels,Description,Environment,Watchers,Watchers Id,Original estimate,Remaining Estimate,Time Spent,Work Ratio,Σ Original Estimate,Σ Remaining Estimate,Σ Time Spent,Security Level,Attachment,Attachment,Attachment,Custom field (Development),Custom field (Issue colour),Custom field (Rank),Custom field (Start date),Team Id,Team Name,Status Category,Status Category Changed
+Subtask 2.1,KAN-3,10012,Subtask,Defects,KAN,Library Managment System,software,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,,,,,,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,11/Sep/26 9:12 PM,11/Sep/26 9:13 PM,,,,0,,,,,,,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,,,,,,,,,,,,,,0|i0002n:,,,,In Progress,11/Sep/26 9:12 PM
+BUG-001: Loan Rule Update Bypasses Numeric Validation,KAN-4,10013,Story,Defects,KAN,Library Managment System,software,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,,High,,,,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,11/Sep/26 9:13 PM,11/Sep/26 11:04 PM,11/Sep/26 11:08 PM,,,0,baseline-testing,data-integrity,validation-bug,,"Loan rule UPDATE endpoint bypasses the numeric validation enforced by CREATE endpoint.
+
+AFFECTED ENDPOINTS:
+
+* PUT /api/loan-rules/:id (accepts invalid values)
+* POST /api/loan-rules/ (correctly rejects invalid values)
+
+BASELINE VERSION: v1.0 (commit bfe098c)
+
+SOURCE CODE LOCATION:
+
+* File: backend/src/routes/loanRules.js
+* POST validation: Lines 26-28
+* PUT endpoint: Lines 43-72 (missing validation)
+
+ISSUE:
+POST /api/loan-rules/ correctly validates:
+
+* loan_period_days > 0
+* max_items_checked_out > 0
+* renewal_limit >= 0
+
+PUT /api/loan-rules/:id applies NO such validation - accepts and persists negative values directly to database.
+
+STEPS TO REPRODUCE:
+
+# POST /api/loan-rules/ with valid data to create rule (e.g., id 6)
+Body: {""name"":""Test Rule"",""patron_type"":""ADULT"",""loan_period_days"":14,""max_items_checked_out"":10,""renewal_limit"":2}
+# Verify rule created (201 response)
+# PUT /api/loan-rules/6 with negative values
+Body: {""max_items_checked_out"":-5,""loan_period_days"":-10,""renewal_limit"":-1}
+# Observe response
+# GET /api/loan-rules/6 to verify persisted values
+
+EXPECTED RESULT:
+PUT request returns 400 Bad Request
+Error message: ""loan_period_days and max_items_checked_out must be positive; renewal_limit cannot be negative.""
+No changes written to database
+
+ACTUAL RESULT:
+PUT request returns 200 OK
+Response: {""id"":6,""max_items_checked_out"":-5,""loan_period_days"":-10,""renewal_limit"":-1,...}
+Negative values persisted to database
+A rule with negative loan period is now live in production system
+
+IMPACT:
+
+* Data integrity compromised
+* Invalid business rules can be activated
+* Negative loan periods cause undefined behavior in eligibility checks
+* Same issue exists in requestingRules.js
+
+RECOMMENDATION:
+Add validation to PUT /api/loan-rules/:id matching POST validation:
+
+{code:javascript}if (loan_period_days <= 0 || max_items_checked_out <= 0 || renewal_limit < 0) {
+  return res.status(400).json({
+    error: ""loan_period_days and max_items_checked_out must be positive; renewal_limit cannot be negative.""
+  });
+}{code}",,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,,,,,,,,,11/Sep/26 11:04 PM;8744b85b-bfb1-4290-aec9-5066f1cf2cf2;TC006_GET_Persisted_NegativeValues.json;https://rehanzeb161.atlassian.net/rest/api/3/attachment/content/10001,11/Sep/26 11:04 PM;8744b85b-bfb1-4290-aec9-5066f1cf2cf2;TC006_PUT_NegativeValues_Accepted.json;https://rehanzeb161.atlassian.net/rest/api/3/attachment/content/10000,,,,0|i0002v:,,6df935be-39dd-4db9-907f-3a77730302c8,QA Team,In Progress,11/Sep/26 9:13 PM
+BUG-002: Item Deletion Ignores Active Holds on That Item,KAN-6,10015,Story,Defects,KAN,Library Managment System,software,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,,Highest,,,,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,11/Sep/26 9:36 PM,11/Sep/26 11:04 PM,11/Sep/26 11:09 PM,,,0,baseline-testing,business-logic,data-integrity,holds-management,"Item deletion endpoint checks only for open checkouts, never queries holds table for item_id. Items with active holds placed directly on them can be deleted, orphaning the hold.
+
+AFFECTED ENDPOINT:
+
+* DELETE /api/records/items/:id
+
+BASELINE VERSION: v1.0 (commit bfe098c)
+
+SOURCE CODE LOCATION:
+
+* File: backend/src/routes/records.js
+* DELETE item handler: Lines 100-122
+* Issue: Only checks checkouts table, never queries holds table
+
+BUSINESS RULE INCONSISTENCY:
+
+* DELETE /api/records/bib-records/:id correctly blocks deletion when active holds exist (lines 49-71)
+* DELETE /api/records/items/:id does NOT implement equivalent hold check
+
+ISSUE:
+When an item has an ACTIVE hold with item_id set (patron requested specific item, not just bib), deletion succeeds with 200 OK. The foreign key constraint has ON DELETE SET NULL, so:
+
+# Item is deleted from database
+# Hold record survives with item_id silently changed to null
+# Patron left with ACTIVE hold pointing at non-existent item
+# No warning, no error, no notification
+
+STEPS TO REPRODUCE:
+
+# Create new bib record (e.g., id 10, ""Test Deletion Gap Book"")
+# Create new item for that bib (e.g., id 6, barcode ""BC-TEST-GAP-1"", status AVAILABLE)
+# Create new patron (e.g., id 6, ""Gap Test Patron"")
+# Place hold with item_id specified:
+POST /api/records/holds
+Body: {""patron_id"":6,""bib_id"":10,""item_id"":6}
+# Verify hold created: GET /api/records/holds/8
+Confirm: {""id"":8,""patron_id"":6,""bib_id"":10,""item_id"":6,""status"":""ACTIVE"",...}
+# DELETE /api/records/items/6
+# Observe response (200 OK)
+# Re-fetch hold: GET /api/records/holds/8
+
+EXPECTED RESULT:
+Step 6 returns 409 Conflict
+Error message: ""Cannot delete item: it has 1 active hold. Cancel the hold first.""
+Item remains in database
+Hold unchanged
+
+ACTUAL RESULT:
+Step 6: 200 OK {""success"":true,""message"":""Item deleted.""}
+Step 8: {""id"":8,""patron_id"":6,""bib_id"":10,""item_id"":null,""status"":""ACTIVE"",...}
+
+Item deleted successfully
+Hold's item_id silently nulled by FK constraint
+Patron has ACTIVE hold for non-existent item
+No error, no audit trail
+
+IMPACT:
+
+* Critical data integrity issue
+* Patron holds orphaned without notification
+* Staff unaware item was requested before deletion
+* Inconsistent with bib-deletion protection logic
+* Violates business rule: items patrons are waiting for should not disappear
+
+RECOMMENDATION:
+Add hold check to DELETE /api/records/items/:id before deletion:
+
+const holdCheck = await pool.query(
+  'SELECT COUNT(*) as cnt FROM holds WHERE item_id = $1 AND status = $2',
+  [itemId, 'ACTIVE']
+);
+if (parseInt(holdCheck.rows[0].cnt) > 0) {
+  return res.status(409).json({
+    error: {{Cannot delete item: it has ${holdCheck.rows[0].cnt} active hold(s). Cancel the hold(s) first.}},
+    blocked: true,
+    active_holds: parseInt(holdCheck.rows[0].cnt)
+  });
+}
+
+REPRODUCIBILITY: 100% (always reproducible)
+RELATED TEST CASE: TC-10",,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,,,,,,,,,11/Sep/26 11:04 PM;8744b85b-bfb1-4290-aec9-5066f1cf2cf2;TC010_DELETE_ItemResponse_200.json;https://rehanzeb161.atlassian.net/rest/api/3/attachment/content/10003,11/Sep/26 11:04 PM;8744b85b-bfb1-4290-aec9-5066f1cf2cf2;TC010_Hold_AfterDeletion.json;https://rehanzeb161.atlassian.net/rest/api/3/attachment/content/10002,11/Sep/26 11:04 PM;8744b85b-bfb1-4290-aec9-5066f1cf2cf2;TC010_Hold_BeforeDeletion.json;https://rehanzeb161.atlassian.net/rest/api/3/attachment/content/10004,,,0|i00033:,,6df935be-39dd-4db9-907f-3a77730302c8,QA Team,In Progress,11/Sep/26 9:36 PM
+BUG-003 Lock acquisition bypasses timeout validation,KAN-7,10016,Story,Defects,KAN,Library Managment System,software,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,,Medium,,,,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,11/Sep/26 9:38 PM,11/Sep/26 11:05 PM,11/Sep/26 11:09 PM,,,0,baseline-testing,input-validation,validation-bug,,"Lock acquisition endpoint accepts negative timeout_minutes values without validation, while settings endpoint correctly rejects them.
+
+AFFECTED ENDPOINTS:
+
+* POST /api/locks/ (accepts negative timeout)
+* PUT /api/locks/settings (correctly rejects <=0)
+
+BASELINE VERSION: v1.0 (commit bfe098c)
+
+SOURCE CODE LOCATION:
+
+* File: backend/src/routes/locks.js
+* PUT /settings validation: Lines 42-47 (correct)
+* POST /locks acquisition: Line 79 (missing validation)
+
+VALIDATION INCONSISTENCY:
+PUT /api/locks/settings correctly validates:
+
+if (!minutes || minutes <= 0) {
+  return res.status(400).json({
+    error: ""default_lock_timeout_minutes must be a positive number.""
+  });
+}
+
+POST /api/locks/ applies NO validation:
+
+const timeout = req.body.timeout_minutes || defaultTimeout;
+// No check - accepts negative values
+
+ISSUE:
+Negative timeout values are accepted and persisted. However, blast radius is self-limited: lazy-expiry sweep (runs on every GET /api/locks/) correctly recognizes locked_at + (-5 min) < now() and auto-expires the lock immediately, so it never appears in active lock list.
+
+Still, invalid input should be rejected at entry point, not relied upon to be cleaned up later.
+
+STEPS TO REPRODUCE:
+
+# Authenticate as admin user
+# POST /api/locks/ with negative timeout
+Body: {""record_type"":""ITEM"",""record_id"":9999,""timeout_minutes"":-5}
+# Observe response (201 Created)
+# Immediately GET /api/locks/ to list active locks
+# Observe lock id 4 is absent (auto-expired by lazy sweep)
+
+EXPECTED RESULT:
+Step 2 returns 400 Bad Request
+Error message: ""timeout_minutes must be a positive number.""
+No lock created
+
+ACTUAL RESULT:
+Step 2: 201 Created
+Response: {""id"":4,""record_type"":""ITEM"",""record_id"":9999,""locked_by"":1,""timeout_minutes"":-5,""unlocked_at"":null,...}
+
+Lock created with negative timeout
+On next GET, lazy-expiry sweep auto-expires it (not visible in active list)
+Input validation gap exists, but impact limited by expiry mechanism
+
+IMPACT:
+
+* Input validation gap
+* Inconsistent with settings endpoint validation
+* Invalid data briefly persisted (until next read triggers expiry)
+* Low severity due to self-correcting behavior
+
+RECOMMENDATION:
+Add validation to POST /api/locks/ before lock creation:
+
+const timeout = req.body.timeout_minutes || defaultTimeout;
+if (timeout <= 0) {
+  return res.status(400).json({
+    error: ""timeout_minutes must be a positive number.""
+  });
+}
+
+REPRODUCIBILITY: 100% (always reproducible)
+RELATED TEST CASE: TC-14",,Rehan Ahmed,712020:4409cfbf-e009-4180-9303-2ef47e5eea61,,,,,,,,,11/Sep/26 11:05 PM;8744b85b-bfb1-4290-aec9-5066f1cf2cf2;TC014_GET_Locks_AutoExpired.json;https://rehanzeb161.atlassian.net/rest/api/3/attachment/content/10005,11/Sep/26 11:05 PM;8744b85b-bfb1-4290-aec9-5066f1cf2cf2;TC014_POST_NegativeTimeout_Accepted.json;https://rehanzeb161.atlassian.net/rest/api/3/attachment/content/10006,,,,0|i0003b:,,6df935be-39dd-4db9-907f-3a77730302c8,QA Team,In Progress,11/Sep/26 9:38 PM

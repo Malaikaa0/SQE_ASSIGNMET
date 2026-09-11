@@ -1,0 +1,39 @@
+{
+  "test_case": "TC-14",
+  "endpoint": "POST /api/locks/",
+  "request": {
+    "method": "POST",
+    "url": "https://localhost:8443/api/locks/",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    },
+    "body": {
+      "record_type": "ITEM",
+      "record_id": 9999,
+      "timeout_minutes": -5
+    }
+  },
+  "response": {
+    "status": 201,
+    "statusText": "Created",
+    "body": {
+      "id": 4,
+      "record_type": "ITEM",
+      "record_id": 9999,
+      "locked_by": 1,
+      "locked_by_username": "admin",
+      "locked_at": "2026-09-11T22:06:42.123Z",
+      "timeout_minutes": -5,
+      "unlocked_at": null,
+      "unlocked_by": null,
+      "unlock_reason": null
+    }
+  },
+  "defect": "BUG-003",
+  "issue": "Lock acquisition accepted negative timeout_minutes value",
+  "expected_status": 400,
+  "actual_status": 201,
+  "note": "Negative timeout creates lock that expires before it starts (locked_at + (-5 min) < now())",
+  "timestamp": "2026-09-11T22:06:42.123Z"
+}

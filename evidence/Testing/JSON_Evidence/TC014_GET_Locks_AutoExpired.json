@@ -1,0 +1,50 @@
+{
+  "test_case": "TC-14",
+  "endpoint": "GET /api/locks/",
+  "request": {
+    "method": "GET",
+    "url": "https://localhost:8443/api/locks/",
+    "headers": {
+      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+  },
+  "response": {
+    "status": 200,
+    "statusText": "OK",
+    "body": {
+      "locks": [
+        {
+          "id": 1,
+          "record_type": "BIB_RECORD",
+          "record_id": 5,
+          "locked_by": 2,
+          "locked_by_username": "circsuper",
+          "locked_at": "2026-09-11T22:00:15.456Z",
+          "timeout_minutes": 15,
+          "unlocked_at": null
+        },
+        {
+          "id": 3,
+          "record_type": "BIB_RECORD",
+          "record_id": 1,
+          "locked_by": 2,
+          "locked_by_username": "circsuper",
+          "locked_at": "2026-09-11T22:06:46.789Z",
+          "timeout_minutes": 15,
+          "unlocked_at": null
+        }
+      ],
+      "total": 2
+    }
+  },
+  "defect": "BUG-003",
+  "observation": "Lock id 4 (with timeout_minutes:-5) is absent from active locks list",
+  "reason": "Lazy-expiry sweep auto-expired it because locked_at + (-5 min) < now()",
+  "note": "Input validation gap exists, but blast radius self-limited by expiry mechanism",
+  "missing_lock": {
+    "id": 4,
+    "timeout_minutes": -5,
+    "status": "auto-expired on first read"
+  },
+  "timestamp": "2026-09-11T22:06:50.456Z"
+}
